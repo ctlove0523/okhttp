@@ -1,6 +1,89 @@
 Change Log
 ==========
 
+## Version 4.8.0
+
+_2020-07-11_
+
+ *  New: Change `HeldCertificate.Builder` to use its own ASN.1 certificate encoder. This is part
+    of our effort to remove the okhttp-tls module's dependency on Bouncy Castle. We think Bouncy 
+    Castle is great! But it's a large dependency (6.5 MiB) and its security provider feature 
+    impacts VM-wide behavior.
+
+ *  New: Reduce contention for applications that make a very high number of concurrent requests.
+    Previously OkHttp used its connection pool as a lock when making changes to connections and
+    calls. With this change each connection is locked independently.
+    
+ *  Upgrade: [Okio 2.7.0][okio_2_7_0].
+
+    ```kotlin
+    implementation("com.squareup.okio:okio:2.7.0")
+    ```
+
+ *  Fix: Avoid log messages like "Didn't find class org.conscrypt.ConscryptHostnameVerifier" when
+    detecting the TLS capabilities of the host platform.
+    
+ *  Fix: Don't crash in `HttpUrl.topPrivateDomain()` when the hostname is malformed. 
+
+ *  Fix: Don't attempt Brotli decompression if the response body is empty.
+
+
+## Version 4.7.2
+
+_2020-05-20_
+
+ *  Fix: Don't crash inspecting whether the host platform is JVM or Android. With 4.7.0 and 4.7.1 we
+    had a crash `IllegalArgumentException: Not a Conscrypt trust manager` because we depended on
+    initialization order of companion objects.
+
+
+## Version 4.7.1
+
+_2020-05-18_
+
+ *  Fix: Pass the right arguments in the trust manager created for `addInsecureHost()`. Without the
+    fix insecure hosts crash with an `IllegalArgumentException` on Android.
+
+
+## Version 4.7.0
+
+_2020-05-17_
+
+ *  New: `HandshakeCertificates.Builder.addInsecureHost()` makes it easy to turn off security in
+    private development environments that only carry test data. Prefer this over creating an
+    all-trusting `TrustManager` because only hosts on the allowlist are insecure. From
+    [our DevServer sample][dev_server]:
+
+    ```kotlin
+    val clientCertificates = HandshakeCertificates.Builder()
+        .addPlatformTrustedCertificates()
+        .addInsecureHost("localhost")
+        .build()
+
+    val client = OkHttpClient.Builder()
+        .sslSocketFactory(clientCertificates.sslSocketFactory(), clientCertificates.trustManager)
+        .build()
+    ```
+
+ *  New: Add `cacheHit`, `cacheMiss`, and `cacheConditionalHit()` events to `EventListener`. Use
+    these in logs, metrics, and even test cases to confirm your cache headers are configured as
+    expected.
+
+ *  New: Constant string `okhttp3.VERSION`. This is a string like "4.5.0-RC1", "4.5.0", or
+    "4.6.0-SNAPSHOT" indicating the version of OkHttp in the current runtime. Use this to include
+    the OkHttp version in custom `User-Agent` headers.
+
+ *  Fix: Don't crash when running as a plugin in Android Studio Canary 4.1. To enable
+    platform-specific TLS features OkHttp must detect whether it's running in a JVM or in Android.
+    The upcoming Android Studio runs in a JVM but has classes from Android and that confused OkHttp!
+
+ *  Fix: Include the header `Accept: text/event-stream` for SSE calls. This header is not added if
+    the request already contains an `Accept` header.
+
+ *  Fix: Don't crash with a `NullPointerException` if a server sends a close while we're sending a
+    ping. OkHttp had a race condition bug.
+
+
 ## Version 4.6.0
 
 _2020-04-28_
@@ -376,14 +459,17 @@ _2019-06-03_
 
  [bom]: https://docs.gradle.org/6.2/userguide/platforms.html#sub:bom_import
  [bouncy_castle_releases]: https://www.bouncycastle.org/releasenotes.html
+ [dev_server]: https://github.com/square/okhttp/blob/482f88300f78c3419b04379fc26c3683c10d6a9d/samples/guide/src/main/java/okhttp3/recipes/kt/DevServer.kt
  [iana_websocket]: https://www.iana.org/assignments/websocket/websocket.txt
  [jetty_8_252]: https://webtide.com/jetty-alpn-java-8u252/
  [kotlin_1_3_71]: https://github.com/JetBrains/kotlin/releases/tag/v1.3.71
  [legacy_interceptor]: https://gist.github.com/swankjesse/80135f4e03629527e723ab3bcf64be0b
  [okhttp4_blog_post]: https://cashapp.github.io/2019-06-26/okhttp-4-goes-kotlin
  [okio_2_6_0]: https://square.github.io/okio/changelog/#version-260
+ [okio_2_7_0]: https://square.github.io/okio/changelog/#version-270
  [public_suffix]: https://publicsuffix.org/
  [upgrading_to_okhttp_4]: https://square.github.io/okhttp/upgrading_to_okhttp_4/
  [rfc_2045]: https://tools.ietf.org/html/rfc2045
  [rfc_7231_647]: https://tools.ietf.org/html/rfc7231#section-6.4.7
  [rfc_7692]: https://tools.ietf.org/html/rfc7692
+ [semver]: https://semver.org/

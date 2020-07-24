@@ -30,12 +30,12 @@ import javax.net.ssl.X509TrustManager
 import okhttp3.Protocol
 import okhttp3.internal.SuppressSignatureCheck
 import okhttp3.internal.platform.android.AndroidCertificateChainCleaner
+import okhttp3.internal.platform.android.AndroidSocketAdapter
 import okhttp3.internal.platform.android.BouncyCastleSocketAdapter
 import okhttp3.internal.platform.android.CloseGuard
 import okhttp3.internal.platform.android.ConscryptSocketAdapter
 import okhttp3.internal.platform.android.DeferredSocketAdapter
 import okhttp3.internal.platform.android.StandardAndroidSocketAdapter
-import okhttp3.internal.platform.android.androidLog
 import okhttp3.internal.tls.BasicTrustRootIndex
 import okhttp3.internal.tls.CertificateChainCleaner
 import okhttp3.internal.tls.TrustRootIndex
@@ -45,9 +45,10 @@ import okhttp3.internal.tls.TrustRootIndex
 class AndroidPlatform : Platform() {
   private val socketAdapters = listOfNotNull(
       StandardAndroidSocketAdapter.buildIfSupported(),
-      ConscryptSocketAdapter.buildIfSupported(),
-      DeferredSocketAdapter("com.google.android.gms.org.conscrypt"),
-      BouncyCastleSocketAdapter.buildIfSupported()
+      DeferredSocketAdapter(AndroidSocketAdapter.playProviderFactory),
+      // Delay and Defer any initialisation of Conscrypt and BouncyCastle
+      DeferredSocketAdapter(ConscryptSocketAdapter.factory),
+      DeferredSocketAdapter(BouncyCastleSocketAdapter.factory)
   ).filter { it.isSupported() }
 
   private val closeGuard = CloseGuard.get()
@@ -88,10 +89,6 @@ class AndroidPlatform : Platform() {
   override fun getSelectedProtocol(sslSocket: SSLSocket) =
       // No TLS extensions if the socket class is custom.
       socketAdapters.find { it.matchesSocket(sslSocket) }?.getSelectedProtocol(sslSocket)
-
-  override fun log(message: String, level: Int, t: Throwable?) {
-    androidLog(level, message, t)
-  }
 
   override fun getStackTraceForCloseable(closer: String): Any? = closeGuard.createAndOpen(closer)
 
@@ -148,22 +145,6 @@ class AndroidPlatform : Platform() {
   }
 
   companion object {
-    val isAndroid: Boolean = try {
-      // Trigger an early exception over a fatal error, prefer a RuntimeException over Error.
-      Class.forName("com.android.org.conscrypt.OpenSSLSocketImpl")
-
-      // account for android-all, forces UnsatisfiedLinkError in Intellij
-      check(Build.VERSION.SDK_INT > 0)
-
-      true
-    } catch (_: ClassNotFoundException) {
-      // Running in a JVM
-      false
-    } catch (_: UnsatisfiedLinkError) {
-      // Running in a JVM/Intellij with android-all on the classpath
-      false
-    }
-
     val isSupported: Boolean = when {
       !isAndroid -> false
       Build.VERSION.SDK_INT >= 30 -> false // graylisted methods are banned
